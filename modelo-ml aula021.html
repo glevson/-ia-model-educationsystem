@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apresentação: Sistema de Recomendação Híbrido</title>
+    
+    <!-- Estilos do Reveal.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/dracula.min.css">
+    
+    <!-- Highlight.js para coloração de sintaxe do código -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/monokai.min.css">
+
+    <style>
+        .reveal h1, .reveal h2, .reveal h3 { text-transform: none; }
+        .code-annotation { font-size: 0.6em; color: #8BE9FD; }
+        .feature-box { border: 2px solid #50fa7b; padding: 10px; border-radius: 10px; display: inline-block; margin: 5px; }
+        .target-box { border: 2px solid #ff79c6; padding: 10px; border-radius: 10px; display: inline-block; margin: 5px; }
+        table { font-size: 0.6em !important; }
+        .fragment.visible:not(.current-fragment) { color: #6272a4; }
+    </style>
+</head>
+<body>
+
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- Slide 1: Título -->
+            <section>
+                <h2>Arquitetura de Machine Learning</h2>
+                <h3>Sistema de Recomendação por Perfil de Aluno</h3>
+                <p><small>Análise técnica para Graduação em Computação</small></p>
+            </section>
+
+            <!-- Slide 2: Visão Geral -->
+            <section>
+                <h3>O Problema de Negócio</h3>
+                <p>O código implementa um sistema de recomendação educacional que personaliza o ensino baseando-se em duas dimensões:</p>
+                <ul>
+                    <li class="fragment"><strong>Como</strong> o aluno aprende (Formato do conteúdo).</li>
+                    <li class="fragment"><strong>O que</strong> o aluno deve estudar (Tópico sugerido).</li>
+                </ul>
+                <p class="fragment" style="margin-top: 20px; color: #f1fa8c;">
+                    <em>Solução: Uma arquitetura composta (Ensemble/Híbrida) usando dois algoritmos distintos.</em>
+                </p>
+            </section>
+
+            <!-- Slide 3: Engenharia de Dados (Features) -->
+            <section>
+                <h3>Engenharia de Dados (Input)</h3>
+                <p>A matriz <code>X</code> contém 6 características (features) por aluno:</p>
+                
+                <div style="font-size: 0.8em;">
+                    <span class="feature-box">Perfil de Aprendizagem</span>
+                    <span class="feature-box">Desempenho (Notas)</span>
+                </div>
+
+                <pre><code class="python" data-trim data-noescape>
+# Dados: [Visual, Auditivo, Prático | Nota_Py, Nota_Design, Nota_Agile]
+X = np.array([
+    [1,0,0,  5,1,1],  # Aluno 1: Visual, bom em Python
+    [0,1,0,  1,5,2],  # Aluno 2: Auditivo, bom em Design
+    ...
+])
+                </code></pre>
+                <p class="code-annotation">Observem que os dados são heterogêneos: 3 colunas categóricas (One-Hot) e 3 colunas numéricas contínuas.</p>
+            </section>
+
+            <!-- Slide 4: Estratégia de Fatiamento (Slicing) -->
+            <section>
+                <h3>Estratégia de "Slicing"</h3>
+                <p>O sistema divide o input para alimentar modelos especializados.</p>
+                
+                <div style="display: flex; justify-content: space-around; align-items: center;">
+                    <div style="width: 45%;">
+                        <h4>Modelo A (Estilo)</h4>
+                        <pre><code class="python">X[:, :3]</code></pre>
+                        <small>Usa apenas: Visual, Auditivo, Prático.</small>
+                    </div>
+                    <div style="font-size: 2em;">➔</div>
+                    <div style="width: 45%;">
+                        <h4>Modelo B (Conteúdo)</h4>
+                        <pre><code class="python">X[:, 3:]</code></pre>
+                        <small>Usa apenas: Notas de Python, Design, Agile.</small>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Slide 5: Modelo 1 - Decision Tree -->
+            <section>
+                <h3>Modelo 1: Decision Tree Classifier</h3>
+                <pre><code class="python">tree = DecisionTreeClassifier(max_depth=3).fit(X[:, :3], y_format)</code></pre>
+                
+                <ul>
+                    <li><strong>Objetivo:</strong> Prever o <em>Formato</em> (Vídeo, Podcast, Exercício).</li>
+                    <li><strong>Por que Árvore?</strong> O perfil de aprendizagem (Visual/Auditivo) segue regras lógicas claras ("Se Visual, então Vídeo").</li>
+                    <li><strong>Hiperparâmetro:</strong> <code>max_depth=3</code>.
+                        <ul>
+                            <li>Limita a profundidade da árvore.</li>
+                            <li>Evita <em>Overfitting</em> (decorar os dados) e melhora a generalização.</li>
+                        </ul>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- Slide 6: Modelo 2 - KNN -->
+            <section>
+                <h3>Modelo 2: K-Nearest Neighbors (KNN)</h3>
+                <pre><code class="python">knn = KNeighborsClassifier(n_neighbors=1).fit(X[:, 3:], y_topic)</code></pre>
+                
+                <ul>
+                    <li><strong>Objetivo:</strong> Recomendar o <em>Tópico</em> de estudo.</li>
+                    <li><strong>Lógica:</strong> Baseada em similaridade vetorial.</li>
+                    <li><strong>Funcionamento:</strong>
+                        <ol>
+                            <li>O modelo plota as notas do aluno num espaço 3D.</li>
+                            <li>Encontra o aluno mais próximo (vizinho) na base histórica.</li>
+                            <li>Recomenda o tópico que foi útil para aquele perfil similar.</li>
+                        </ol>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- Slide 7: MLOps com MLflow -->
+            <section>
+                <h3>Ciclo de Vida com MLflow</h3>
+                <pre><code class="python">
+mlflow.set_experiment("ECOMENDAÇÃO POR PERFIL DE ALUNO")
+
+def train_models():
+    with mlflow.start_run():
+        # Treinamento...
+                </code></pre>
+                <ul>
+                    <li><strong>MLflow:</strong> Ferramenta para gerenciar o ciclo de vida de ML.</li>
+                    <li><strong>Experiment:</strong> Agrupa várias execuções (runs) de um mesmo projeto.</li>
+                    <li><strong>Rastreabilidade:</strong> Garante que saibamos exatamente qual versão do código gerou o modelo final.</li>
+                </ul>
+            </section>
+
+            <!-- Slide 8: Persistência e Entrega -->
+            <section>
+                <h3>Persistência do Modelo (Pickle)</h3>
+                <pre><code class="python">
+final_model = {"tree": tree, "knn": knn}
+        
+with open("ia_models.pkl", "wb") as f:
+    pickle.dump(final_model, f)
+                </code></pre>
+                <ul>
+                    <li><strong>Serialização:</strong> O objeto Python (dicionário contendo os dois modelos treinados) é convertido em um fluxo de bytes.</li>
+                    <li><strong>Arquivo .pkl:</strong> Permite que este modelo seja carregado posteriormente por uma API (Flask/FastAPI) sem necessidade de retreinar.</li>
+                    <li><strong>Empacotamento:</strong> Note que salvamos um dicionário, encapsulando toda a inteligência em um único arquivo.</li>
+                </ul>
+            </section>
+
+            <!-- Slide 9: Resumo da Arquitetura -->
+            <section>
+                <h3>Resumo da Arquitetura</h3>
+                <div style="background: white; padding: 20px; border-radius: 10px;">
+                    <svg width="800" height="300" viewBox="0 0 800 300">
+                        <!-- Input -->
+                        <rect x="50" y="100" width="100" height="100" fill="#6272a4" rx="10" />
+                        <text x="100" y="155" text-anchor="middle" fill="white" font-family="sans-serif">Input X</text>
+                        
+                        <!-- Split -->
+                        <path d="M 160 150 L 250 80" stroke="#50fa7b" stroke-width="3" fill="none" marker-end="url(#arrow)" />
+                        <path d="M 160 150 L 250 220" stroke="#50fa7b" stroke-width="3" fill="none" marker-end="url(#arrow)" />
+
+                        <!-- Models -->
+                        <rect x="260" y="40" width="140" height="80" fill="#ff79c6" rx="10" />
+                        <text x="330" y="85" text-anchor="middle" fill="white" font-size="16">Tree (Estilo)</text>
+
+                        <rect x="260" y="180" width="140" height="80" fill="#8be9fd" rx="10" />
+                        <text x="330" y="225" text-anchor="middle" fill="black" font-size="16">KNN (Notas)</text>
+
+                        <!-- Dictionary -->
+                        <rect x="500" y="100" width="150" height="100" fill="#f1fa8c" rx="10" />
+                        <text x="575" y="155" text-anchor="middle" fill="black">Dict Final</text>
+
+                        <!-- Pickle -->
+                        <path d="M 660 150 L 730 150" stroke="white" stroke-width="3" marker-end="url(#arrow)" />
+                        <text x="750" y="155" text-anchor="middle" fill="white">.pkl</text>
+                    </svg>
+                </div>
+            </section>
+            
+            <!-- Slide 10: Conclusão -->
+            <section>
+                <h3>Pontos Chave para Levar</h3>
+                <ol>
+                    <li>O pré-processamento (fatiamento de arrays) é tão importante quanto o modelo.</li>
+                    <li>Não existe "bala de prata": usamos Árvores para regras lógicas e KNN para similaridade numérica.</li>
+                    <li>MLOps e Persistência são fundamentais para transformar código em produto.</li>
+                </ol>
+            </section>
+
+        </div>
+    </div>
+
+    <!-- Scripts do Reveal.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/highlight.min.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            plugins: [ RevealHighlight ],
+            slideNumber: true,
+            transition: 'convex' // none/fade/slide/convex/concave/zoom
+        });
+    </script>
+</body>
+</html>

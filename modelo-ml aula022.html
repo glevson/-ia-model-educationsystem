@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Dive: Árvores e KNN</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/night.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
+
+    <style>
+        .reveal h1, .reveal h2, .reveal h3 { text-transform: none; color: #ffeb3b; }
+        .reveal p { font-size: 0.8em; }
+        .math-concept { color: #4fc3f7; font-style: italic; }
+        
+        /* Estilos para os diagramas SVG */
+        .diagram-container {
+            background-color: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px auto;
+            width: fit-content;
+        }
+        text { font-family: sans-serif; fill: #fff; font-size: 14px; }
+        .node-rect { fill: #2c3e50; stroke: #4fc3f7; stroke-width: 2; }
+        .leaf-rect { fill: #27ae60; stroke: #fff; stroke-width: 1; }
+        .axis { stroke: #aaa; stroke-width: 1; }
+        .grid-line { stroke: #444; stroke-dasharray: 4; }
+        .data-point { r: 6; }
+        .highlight-line { stroke: #ffeb3b; stroke-width: 2; stroke-dasharray: 5; animation: dash 1s linear infinite; }
+        
+        @keyframes dash {
+            to { stroke-dashoffset: -10; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- CAPA -->
+            <section>
+                <h2>Mecânica dos Algoritmos</h2>
+                <h3>Decision Trees & K-Nearest Neighbors</h3>
+                <p>Uma análise detalhada da implementação do Sistema de Recomendação</p>
+                <p><small>Foco: Lógica de Separação e Espaços Vetoriais</small></p>
+            </section>
+
+            <!-- CONTEXTO DOS DADOS -->
+            <section>
+                <h3>1. Contexto dos Dados</h3>
+                <p>Antes de entender o modelo, precisamos visualizar o espaço de características (Feature Space).</p>
+                <pre><code class="python" data-trim>
+# Feature Slicing
+X_style = X[:, :3]  # [Visual, Auditivo, Prático] (Categórico/Binário)
+X_grades = X[:, 3:] # [Nota_Py, Nota_Design, Nota_Agile] (Contínuo)
+                </code></pre>
+                <div class="fragment">
+                    <p><strong>Por que separar?</strong></p>
+                    <ul>
+                        <li><span class="math-concept">X_style</span> representa estados discretos (0 ou 1). Ideal para regras condicionais.</li>
+                        <li><span class="math-concept">X_grades</span> representa magnitudes numéricas. Ideal para cálculo de distância.</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- DECISION TREE: TEORIA -->
+            <section>
+                <h3>2. Decision Tree Classifier</h3>
+                <p>O algoritmo cria um fluxograma hierárquico. Seu objetivo é reduzir a <strong>Entropia</strong> (desordem) dos dados a cada "pergunta" (split).</p>
+                
+                <div style="font-size: 0.7em; text-align: left; margin-top: 20px;">
+                    <p><strong>Como o algoritmo "pensa":</strong></p>
+                    <ol>
+                        <li>Ele analisa todas as 3 colunas (Visual, Auditivo, Prático).</li>
+                        <li>Calcula o ganho de informação: <em>"Qual pergunta divide melhor os formatos de conteúdo?"</em></li>
+                        <li>Exemplo: Se eu separar quem é "Visual", eu iso todos que precisam de "Vídeo"?</li>
+                    </ol>
+                </div>
+            </section>
+
+            <!-- DECISION TREE: VISUALIZAÇÃO -->
+            <section>
+                <h3>Visualização da Árvore (Logic Flow)</h3>
+                <p>Com <code>max_depth=3</code>, a árvore toma decisões sequenciais.</p>
+                
+                <div class="diagram-container">
+                    <svg width="600" height="350" viewBox="0 0 600 350">
+                        <!-- Root Node -->
+                        <line x1="300" y1="50" x2="150" y2="150" stroke="#fff" />
+                        <line x1="300" y1="50" x2="450" y2="150" stroke="#fff" />
+                        
+                        <rect x="220" y="10" width="160" height="40" rx="5" class="node-rect" />
+                        <text x="300" y="35" text-anchor="middle">É Visual == 1?</text>
+
+                        <!-- Level 1 Left -->
+                        <rect x="70" y="150" width="160" height="40" rx="5" class="leaf-rect" />
+                        <text x="150" y="175" text-anchor="middle" fill="white">Class: Vídeo (0)</text>
+                        <text x="120" y="130" text-anchor="middle" fill="#ffeb3b">Sim (True)</text>
+
+                        <!-- Level 1 Right -->
+                        <line x1="450" y1="190" x2="350" y2="280" stroke="#fff" />
+                        <line x1="450" y1="190" x2="550" y2="280" stroke="#fff" />
+
+                        <rect x="370" y="150" width="160" height="40" rx="5" class="node-rect" />
+                        <text x="450" y="175" text-anchor="middle">É Auditivo == 1?</text>
+                        <text x="480" y="130" text-anchor="middle" fill="#ff6b6b">Não (False)</text>
+
+                        <!-- Level 2 Leaves -->
+                        <rect x="270" y="280" width="160" height="40" rx="5" class="leaf-rect" />
+                        <text x="350" y="305" text-anchor="middle">Class: Podcast (1)</text>
+
+                        <rect x="470" y="280" width="160" height="40" rx="5" class="leaf-rect" />
+                        <text x="550" y="305" text-anchor="middle">Class: Exercício (2)</text>
+                    </svg>
+                </div>
+                <small>Interpretação: A árvore aprendeu que a característica "Visual" é a mais discriminante para definir o formato vídeo.</small>
+            </section>
+
+            <!-- KNN: TEORIA -->
+            <section>
+                <h3>3. K-Nearest Neighbors (KNN)</h3>
+                <p>Diferente da árvore, o KNN não cria regras. Ele memoriza a posição dos dados no espaço vetorial.</p>
+                
+                <div style="font-size: 0.8em; margin-top: 20px;">
+                    <p><strong>Métrica de Distância (Euclidiana):</strong></p>
+                    <p>Para um novo aluno $A$ e um aluno existente $B$, calculamos a semelhança baseada nas notas:</p>
+                    \[ d(A, B) = \sqrt{(Py_A - Py_B)^2 + (Des_A - Des_B)^2} \]
+                </div>
+                <p class="fragment"><span class="math-concept">n_neighbors=1</span> significa que o algoritmo é "guloso": ele confia cegamente no vizinho mais próximo, ignorando a média dos demais.</p>
+            </section>
+
+            <!-- KNN: VISUALIZAÇÃO -->
+            <section>
+                <h3>Visualização do KNN (Vector Space)</h3>
+                <p>Imagine o espaço de notas (simplificado para 2D: Python vs Design).</p>
+
+                <div class="diagram-container">
+                    <svg width="500" height="400" viewBox="0 0 500 400">
+                        <!-- Grid -->
+                        <line x1="50" y1="350" x2="450" y2="350" class="axis" /> <!-- X axis -->
+                        <line x1="50" y1="350" x2="50" y2="50" class="axis" />  <!-- Y axis -->
+                        <text x="400" y="380" fill="#aaa">Nota Python</text>
+                        <text x="20" y="100" fill="#aaa" transform="rotate(-90, 20, 100)">Nota Design</text>
+
+                        <!-- Data Points (Treino) -->
+                        <circle cx="100" cy="300" class="data-point" fill="#ff79c6" /> <!-- Aluno A (Baixa nota) -->
+                        <text x="100" y="290" font-size="10">Histórico A</text>
+
+                        <circle cx="350" cy="100" class="data-point" fill="#ff79c6" /> <!-- Aluno B (Alta nota) -->
+                        <text x="350" y="90" font-size="10">Histórico B (Expert)</text>
+
+                        <circle cx="400" cy="320" class="data-point" fill="#ff79c6" /> <!-- Aluno C -->
+
+                        <!-- New Student (Query) -->
+                        <circle cx="320" cy="120" r="8" fill="#50fa7b" stroke="#fff" stroke-width="2" />
+                        <text x="320" y="150" fill="#50fa7b" font-weight="bold">Novo Aluno</text>
+
+                        <!-- Distance Line -->
+                        <line x1="320" y1="120" x2="350" y2="100" class="highlight-line" />
+                        <text x="360" y="130" fill="#ffeb3b" font-size="12">d = menor distância</text>
+                        
+                        <!-- Radius -->
+                        <circle cx="320" cy="120" r="45" fill="none" stroke="rgba(255,255,255,0.3)" stroke-dasharray="2" />
+
+                    </svg>
+                </div>
+                <small>O "Novo Aluno" está geometricamente próximo do "Histórico B". Logo, o KNN atribui o tópico que B estudou.</small>
+            </section>
+
+            <!-- COMPARATIVO TÉCNICO -->
+            <section>
+                <h3>Comparativo de Aprendizagem</h3>
+                <table style="font-size: 0.6em; width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Característica</th>
+                            <th style="color: #4fc3f7;">Decision Tree</th>
+                            <th style="color: #ff79c6;">KNN</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Tipo de Modelo</strong></td>
+                            <td>Baseado em Regras (Eager Learning)</td>
+                            <td>Baseado em Instância (Lazy Learning)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Fronteira de Decisão</strong></td>
+                            <td>Ortogonal (retângulos no espaço)</td>
+                            <td>Complexa (Voronoi tessellation)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Interpretabilidade</strong></td>
+                            <td>Alta (pode ser desenhada)</td>
+                            <td>Média (justificativa por similaridade)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>No nosso código</strong></td>
+                            <td>Define o <em>Formato</em> (Lógica Rígida)</td>
+                            <td>Define o <em>Tópico</em> (Similaridade Fluida)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- PERSISTÊNCIA -->
+            <section>
+                <h3>O artefato final (.pkl)</h3>
+                <p>Ao salvar o dicionário, estamos serializando duas lógicas distintas:</p>
+                <pre><code class="python">
+final_model = {
+    "tree": tree, # Salva as regras if-else aprendidas
+    "knn": knn    # Salva os pontos (X_grades) para comparação futura
+}
+                </code></pre>
+                <div class="fragment" style="background: #333; padding: 10px; border-radius: 5px;">
+                    <p>⚠️ <strong>Atenção:</strong> O KNN é "pesado" para salvar se o dataset for gigante, pois ele precisa guardar os dados de treino para calcular distâncias no futuro. A Árvore é leve, pois guarda apenas as regras.</p>
+                </div>
+            </section>
+
+            <section>
+                <h2>Conclusão</h2>
+                <ul>
+                    <li>Usamos <strong>Árvores</strong> para dados categóricos onde o padrão é claro ("Visual prefere Vídeo").</li>
+                    <li>Usamos <strong>KNN</strong> para dados numéricos onde queremos encontrar "perfis gêmeos" baseados em notas.</li>
+                    <li>O sucesso da IA depende de escolher o algoritmo certo para a natureza estatística dos dados.</li>
+                </ul>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/highlight.min.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            plugins: [ RevealHighlight ],
+            transition: 'zoom' 
+        });
+    </script>
+</body>
+</html>

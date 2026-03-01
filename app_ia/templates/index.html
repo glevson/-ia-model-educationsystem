@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Recomendação IA</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Ícones -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    
+    <style>
+        body {
+            background-color: #f0f2f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .main-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .style-option {
+            cursor: pointer;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            padding: 15px;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        .style-option:hover {
+            border-color: #764ba2;
+            background-color: #f8f9fa;
+        }
+        .style-option.active {
+            border-color: #764ba2;
+            background-color: #e2e6ea;
+            color: #764ba2;
+            font-weight: bold;
+        }
+        .result-box {
+            display: none; /* Escondido inicialmente */
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            animation: fadeIn 0.5s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card main-card">
+                <div class="header-gradient">
+                    <h2><i class="bi bi-robot"></i> Mentor IA</h2>
+                    <p class="mb-0">Recomendação personalizada de estudos</p>
+                </div>
+                
+                <div class="card-body p-4">
+                    <form id="predictionForm">
+                        {% csrf_token %} <!-- Token de segurança do Django -->
+
+                        <!-- Seção 1: Estilo de Aprendizagem (Decision Tree Input) -->
+                        <h5 class="mb-3 text-secondary"><i class="bi bi-person-badge"></i> 1. Como você prefere aprender?</h5>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <div class="style-option" onclick="selectStyle('visual', this)">
+                                    <i class="bi bi-eye fs-2"></i><br>Visual
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="style-option" onclick="selectStyle('auditivo', this)">
+                                    <i class="bi bi-headphones fs-2"></i><br>Auditivo
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="style-option" onclick="selectStyle('pratico', this)">
+                                    <i class="bi bi-hammer fs-2"></i><br>Prático
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Input escondido para guardar o array One-Hot -->
+                        <input type="hidden" id="styleVector" name="styleVector">
+
+                        <hr class="my-4">
+
+                        <!-- Seção 2: Notas (KNN Input) -->
+                        <h5 class="mb-3 text-secondary"><i class="bi bi-bar-chart-fill"></i> 2. Suas notas recentes (0 a 5)</h5>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Python / Lógica</label>
+                                <input type="number" class="form-control" id="gradePy" min="0" max="5" step="0.1" placeholder="Ex: 4.5" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">UX / Design</label>
+                                <input type="number" class="form-control" id="gradeDesign" min="0" max="5" step="0.1" placeholder="Ex: 2.0" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Gestão Ágil</label>
+                                <input type="number" class="form-control" id="gradeAgile" min="0" max="5" step="0.1" placeholder="Ex: 3.5" required>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-5">
+                            <button type="submit" class="btn btn-primary btn-lg" id="btnPredict">
+                                <i class="bi bi-stars"></i> Gerar Recomendação
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Área de Resultado -->
+                    <div id="resultArea" class="result-box text-center">
+                        <h4><i class="bi bi-check-circle-fill"></i> Recomendação Gerada!</h4>
+                        <hr>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <small class="text-uppercase fw-bold text-muted">Formato Ideal</small>
+                                <h3 id="resFormat" class="fw-bold">--</h3>
+                                <p><small>(Baseado na Árvore de Decisão)</small></p>
+                            </div>
+                            <div class="col-md-6 border-start border-success">
+                                <small class="text-uppercase fw-bold text-muted">Tópico Sugerido</small>
+                                <h3 id="resTopic" class="fw-bold">--</h3>
+                                <p><small>(Baseado em Vizinhos Próximos - KNN)</small></p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts -->
+<script>
+    // Lógica para seleção visual do Estilo (UI)
+    let selectedStyleVector = null;
+
+    function selectStyle(type, element) {
+        // Remove active class from all
+        document.querySelectorAll('.style-option').forEach(el => el.classList.remove('active'));
+        // Add active to clicked
+        element.classList.add('active');
+
+        // Define o vetor One-Hot Encoding baseado na escolha
+        // Ordem do modelo: [Visual, Auditivo, Prático]
+        if (type === 'visual')   selectedStyleVector = [1, 0, 0];
+        if (type === 'auditivo') selectedStyleVector = [0, 1, 0];
+        if (type === 'pratico')  selectedStyleVector = [0, 0, 1];
+    }
+
+    // Lógica de Envio do Formulário
+    document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        // Validação simples
+        if (!selectedStyleVector) {
+            alert("Por favor, selecione um estilo de aprendizagem.");
+            return;
+        }
+
+        // Coleta das notas
+        const grades = [
+            parseFloat(document.getElementById('gradePy').value),
+            parseFloat(document.getElementById('gradeDesign').value),
+            parseFloat(document.getElementById('gradeAgile').value)
+        ];
+
+        // Preparar Payload
+        const payload = {
+            style: selectedStyleVector,
+            grades: grades
+        };
+
+        const btn = document.getElementById('btnPredict');
+        const resultArea = document.getElementById('resultArea');
+        
+        // Estado de loading
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
+        resultArea.style.display = 'none';
+
+        try {
+            // Chamada à API (Assume-se que a URL mapeada no urls.py é 'api/predict/')
+            const response = await fetch('/api/predict/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) throw new Error('Erro na API');
+
+            const data = await response.json();
+
+            // Atualiza a tela com o resultado
+            document.getElementById('resFormat').innerText = data.format;
+            document.getElementById('resTopic').innerText = data.topic;
+            
+            resultArea.style.display = 'block';
+
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao processar a recomendação.");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-stars"></i> Gerar Recomendação';
+        }
+    });
+</script>
+
+</body>
+</html>
